@@ -1,4 +1,6 @@
-from models import IMUSamplesBuffer, APIQueueRequest
+from app.models import IMUSamplesBuffer, APIQueueRequest
+from app.models.exceptions import APIError
+from app import log
 
 import _thread
 import time
@@ -47,24 +49,39 @@ class API:
     def start(self) -> None:
         """
         Start background worker thread.
-
-        Returns:
-            None
         """
         if self._running:
             return
 
         self._running = True
+        log("run threads")
         _thread.start_new_thread(self._worker_loop, ())
 
     def stop(self) -> None:
         """
         Stop background worker thread.
-
-        Returns:
-            None
         """
         self._running = False
+
+    def create_session(self) -> str:
+        """
+        Request server to create a new route session
+
+        Returns:
+            str, optional: Created session ID
+        """
+        payload = {
+            "api_key": self._api_key,
+            "device_id": self._device_id
+        }
+
+        content = self._post_with_retry("/create_session", payload)
+        if not content:
+            raise APIError("Failed to create a route session")
+
+        self._session_id = content['session_id']
+        return self._session_id
+        
 
     def send_buffer(self, samples: IMUSamplesBuffer) -> bool:
         """
@@ -77,8 +94,7 @@ class API:
             bool: True if request was queued, False if queue is full
         """
         payload = {
-            "api_key": self._api_key,
-            "device_id": self._device_id,
+            "session_id": self._session_id,
             "timestamp_start": samples.timestamp_start,
             "data": samples.to_binary(),
         }
@@ -97,8 +113,7 @@ class API:
             bool: True if request was queued, False if queue is full
         """
         payload = {
-            "api_key": self._api_key,
-            "device_id": self._device_id,
+            "session_id": self._session_id,
             "window_id": samples.window_id,
             "samples": samples.values,
         }
@@ -133,6 +148,7 @@ class API:
             if len(self._queue) >= self._max_queue_size:
                 return False
             self._queue.append(request)
+            log('added to queue')
             return True
 
     def _pop(self) -> APIQueueRequest|None:
@@ -150,16 +166,13 @@ class API:
     def _worker_loop(self) -> None:
         """
         Background loop that processes queued HTTP requests.
-
-        Returns:
-            None
         """
         while self._running:
             request = self._pop()
             if request is None:
                 time.sleep_ms(50)
                 continue
-
+            
             response_data = self._post_with_retry(request.endpoint, request.payload)
 
             if request.kind == "predict" and response_data is not None:
@@ -182,6 +195,7 @@ class API:
         for attempt in range(self._retry_count + 1):
             response = None
             try:
+                log(url)
                 response = urequests.post(url, json=payload, timeout=self._timeout_s)
                 if 200 <= response.status_code < 300:
                     try:
@@ -189,12 +203,12 @@ class API:
                     except Exception:
                         data = {"status": "ok"}
                     return data
-            except Exception:
-                pass
+            except Exception as e:
+                log(e)
             finally:
                 if response is not None:
                     response.close()
-
+                    
             if attempt < self._retry_count:
                 time.sleep_ms(200)
 

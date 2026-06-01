@@ -27,42 +27,59 @@ class IMUSample:
 class IMUSamplesBuffer:
 
     def __init__(
-            self, 
+            self,
             window_id: int = 0,
             max_size: int = 250
             ) -> None:
         self.window_id = window_id
         self.max_size = max_size
-        self.values: list[IMUSample] = []
+        self._count = 0
+        self._data = bytearray(IMUBinaryCodec.SAMPLE_SIZE * max_size)
         self.timestamp_start = time.ticks_ms()
-        self.binary_codec = IMUBinaryCodec()
+
+    @property
+    def count(self) -> int:
+        return self._count
 
     def register_sample(self, sample: IMUSample) -> None:
         """
-        Add a sample to the buffer
-
-        Args:
-            sample (IMUSample): Sample to add
+        Pack sample directly into the pre-allocated buffer — no heap object retained.
+        When full, new samples overwrite from the start (ring buffer).
         """
-        self.values.append(sample)
-        # Remove first element if buffer to large
-        if len(self.values) > self.max_size:
-            self.values.pop(0)
+        idx = self._count % self.max_size
+        struct.pack_into(
+            IMUBinaryCodec.SAMPLE_FMT,
+            self._data,
+            idx * IMUBinaryCodec.SAMPLE_SIZE,
+            sample.t_us, sample.ax, sample.ay, sample.az,
+            sample.gx, sample.gy, sample.gz, sample.temp_c
+        )
+        if self._count < self.max_size:
+            self._count += 1
 
-    def to_binary(self) -> bytes:
+    def to_binary(self) -> bytearray:
         """
-        Encode buffer values to binary payload
+        Encode buffer to binary payload — header + packed samples.
 
         Returns:
-            bytes: Binary payload ready to send
+            bytearray: Binary payload ready to send
         """
-        return self.binary_codec.encode(self)
-    
+        count = self._count
+        data_len = count * IMUBinaryCodec.SAMPLE_SIZE
+        out = bytearray(IMUBinaryCodec.HEADER_SIZE + data_len)
+        struct.pack_into(
+            IMUBinaryCodec.HEADER_FMT,
+            out, 0,
+            self.window_id, self.timestamp_start, count
+        )
+        out[IMUBinaryCodec.HEADER_SIZE:] = self._data[:data_len]
+        return out
+
     def clear(self) -> None:
         """
-        Clear buffer, set timestamp_start to current time and increase window_id to 1
+        Reset buffer — O(1), no allocation, no GC pressure.
         """
-        self.values.clear()
+        self._count = 0
         self.timestamp_start = time.ticks_ms()
         self.window_id += 1
 
@@ -70,6 +87,8 @@ class IMUSamplesBuffer:
 class IMUBinaryCodec:
     HEADER_FMT = "<IIH"      # window_id, timestamp_start, sample_count
     SAMPLE_FMT = "<I7f"      # t_us, ax, ay, az, gx, gy, gz, temp_c
+    HEADER_SIZE = struct.calcsize(HEADER_FMT)
+    SAMPLE_SIZE = struct.calcsize(SAMPLE_FMT)
 
     def payload_size(self, sample_count: int) -> int:
         """
@@ -81,53 +100,5 @@ class IMUBinaryCodec:
         Returns:
             int: Total payload size in bytes
         """
-        header_size = struct.calcsize(self.HEADER_FMT)
-        sample_size = struct.calcsize(self.SAMPLE_FMT)
-        return header_size + sample_count * sample_size
-
-    def encode(self, buffer: IMUSamplesBuffer) -> bytes:
-        """
-        Encode IMUSamplesBuffer to binary payload.
-
-        Args:
-            buffer (IMUSamplesBuffer): Buffer to encode
-
-        Returns:
-            bytes: Binary payload ready to send
-        """
-        count = len(buffer.values)
-        total_size = self.payload_size(count)
-        out = bytearray(total_size)
-
-        offset = 0
-        struct.pack_into(
-            self.HEADER_FMT,
-            out,
-            offset,
-            buffer.window_id,
-            buffer.timestamp_start,
-            count
-        )
-        offset += struct.calcsize(self.HEADER_FMT)
-
-        i = 0
-        while i < count:
-            s = buffer.values[i]
-            struct.pack_into(
-                self.SAMPLE_FMT,
-                out,
-                offset,
-                s.t_us,
-                s.ax,
-                s.ay,
-                s.az,
-                s.gx,
-                s.gy,
-                s.gz,
-                s.temp_c
-            )
-            offset += struct.calcsize(self.SAMPLE_FMT)
-            i += 1
-
-        return bytes(out)
+        return self.HEADER_SIZE + sample_count * self.SAMPLE_SIZE
 

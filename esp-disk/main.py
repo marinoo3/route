@@ -5,7 +5,7 @@ from config import (
 )
 
 from app.modules import IMUSensor, Display
-from app.services import API
+from app.services import API, SimpleAPI
 from app.controller import Controller
 
 import machine
@@ -20,7 +20,7 @@ def main():
     """
     # ------- Services
     
-    api = API(
+    api = SimpleAPI(
         base_url=API_URL,
         api_key=API_KEY,
         device_id=DEVICE_ID
@@ -48,6 +48,11 @@ def main():
     imu.calibrate_gyro_bias()
     print("Done")
 
+    print("Create route session")
+    session_id = api.create_session()
+    api.start()
+    print(session_id)
+
     # --------- Main loop
     
     while True:
@@ -65,4 +70,5 @@ if __name__ == "__main__":
     # except Exception as e:
     #     print("Exit on error:", e)
     #     machine.reset()
+
 

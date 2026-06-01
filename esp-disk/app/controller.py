@@ -1,6 +1,7 @@
 from app.models import IMUSamplesBuffer
 from app.modules import IMUSensor, Display
 from app.services import API
+from app import log
 
 import time
 
@@ -15,7 +16,7 @@ class Controller:
             push_frecency_sec: int
         ) -> None:
         self.imu = imu
-        self.display = display,
+        self.display = display
         self.api = api
         self.push_frecency_ms = push_frecency_sec * 1000
         self.buffer = IMUSamplesBuffer()
@@ -46,5 +47,6 @@ class Controller:
 
         # Send buffer if it is time to do so
         if self._now() > self.buffer.timestamp_start + self.push_frecency_ms:
-            self.api.send_buffer(self.buffer)
+            log(self.buffer.count)
+#             self.api.send_buffer(self.buffer)
             self.buffer.clear()

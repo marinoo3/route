@@ -8,7 +8,7 @@ SCL_PIN: int = 22
 
 # -------- SERVER
 
-API_URL: str = "http://10.42.0.1:8000/api"
+API_URL: str = "http://0.0.0.0:8000/api"
 API_KEY: str = "123"
 PUSH_FRECENCY_SEC: int = 10
 
