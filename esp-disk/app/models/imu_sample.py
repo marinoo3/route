@@ -6,23 +6,15 @@ class IMUSample:
 
     def __init__(
             self,
-            t_us: int,
             ax: float,
             ay: float,
             az: float,
-            gx: float,
-            gy: float,
             gz: float,
-            temp_c: float
         ) -> None:
-        self.t_us = t_us
         self.ax = ax
         self.ay = ay
         self.az = az
-        self.gx = gx
-        self.gy = gy
         self.gz = gz
-        self.temp_c = temp_c
 
 class IMUSamplesBuffer:
 
@@ -51,8 +43,7 @@ class IMUSamplesBuffer:
             IMUBinaryCodec.SAMPLE_FMT,
             self._data,
             idx * IMUBinaryCodec.SAMPLE_SIZE,
-            sample.t_us, sample.ax, sample.ay, sample.az,
-            sample.gx, sample.gy, sample.gz, sample.temp_c
+            sample.ax, sample.ay, sample.az, sample.gz
         )
         if self._count < self.max_size:
             self._count += 1
@@ -85,8 +76,8 @@ class IMUSamplesBuffer:
 
 
 class IMUBinaryCodec:
-    HEADER_FMT = "<IIH"      # window_id, timestamp_start, sample_count
-    SAMPLE_FMT = "<I7f"      # t_us, ax, ay, az, gx, gy, gz, temp_c
+    HEADER_FMT = "<H"      # window_id, timestamp_start, sample_count
+    SAMPLE_FMT = "<4f"      # t_us, ax, ay, az, gx, gy, gz, temp_c
     HEADER_SIZE = struct.calcsize(HEADER_FMT)
     SAMPLE_SIZE = struct.calcsize(SAMPLE_FMT)
 
@@ -101,4 +92,5 @@ class IMUBinaryCodec:
             int: Total payload size in bytes
         """
         return self.HEADER_SIZE + sample_count * self.SAMPLE_SIZE
+
 

@@ -120,16 +120,11 @@ class IMUSensor:
             IMUSample: Sensor data sample
         """
         ax, ay, az = self._sensor.acceleration
-        gx, gy, gz = self._sensor.gyro
-        temp_c = self._sensor.temperature
+        _, _, gz = self._sensor.gyro
 
         return IMUSample(
-            t_us = time.ticks_us(),
             ax = ax - self._acc_bias[0],
             ay = ay - self._acc_bias[1],
             az = az - self._acc_bias[2],
-            gx = gx - self._gyro_bias[0],
-            gy = gy - self._gyro_bias[1],
             gz = gz - self._gyro_bias[2],
-            temp_c = temp_c,
         )

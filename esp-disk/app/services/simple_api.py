@@ -27,6 +27,12 @@ class SimpleAPI:
         self._retry_count = retry_count
         self._session_id: str | None = None
         self._last_prediction: str | None = None
+        
+    def start(self):
+        print("Start dummy API thread")
+    
+    def stop(self):
+        print("stopped dummy API thread")
 
     def create_session(self) -> str:
         payload = {
@@ -40,12 +46,14 @@ class SimpleAPI:
         return self._session_id
 
     def send_buffer(self, samples: IMUSamplesBuffer) -> bool:
+        print("Building payload")
         payload = {
             "session_id": self._session_id,
             "timestamp_start": samples.timestamp_start,
             "data": samples.to_binary(),
         }
-        return self._post_with_retry("/upload", payload) is not None
+        print("Done")
+        return self._post_with_retry("/register_route_buffer", payload, headers={"Content-Type": "application/octet-stream"}) is not None
 
     def predict(self, samples: IMUSamplesBuffer) -> str | None:
         payload = {
@@ -53,6 +61,7 @@ class SimpleAPI:
             "window_id": samples.window_id,
             "samples": samples.values,
         }
+        print(payload)
         content = self._post_with_retry("/predict", payload)
         if content is not None:
             self._last_prediction = content.get("route")
@@ -61,14 +70,25 @@ class SimpleAPI:
     def get_last_prediction(self) -> str | None:
         return self._last_prediction
 
-    def _post_with_retry(self, endpoint: str, payload: dict) -> dict | None:
+    def _post_with_retry(
+            self, 
+            endpoint: str, 
+            payload: dict, 
+            headers: dict|None = None
+        ) -> dict | None:
         url = self._base_url + endpoint
 
         for attempt in range(self._retry_count + 1):
             response = None
             try:
                 log(url)
-                response = urequests.post(url, json=payload, timeout=self._timeout_s)
+                response = urequests.post(
+                    url, 
+                    json=payload,
+                    timeout=self._timeout_s,
+                    headers=headers
+                )
+                print("Request ended")
                 if 200 <= response.status_code < 300:
                     try:
                         data = response.json()
@@ -85,3 +105,5 @@ class SimpleAPI:
                 time.sleep_ms(200)
 
         return None
+
+

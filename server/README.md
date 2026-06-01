@@ -8,14 +8,11 @@ FastAPI server that receives and processes data from an ESP32 sensor. It provide
 # Activate virtual environment
 source server-env/bin/activate
 
-# Run the development server
-uvicorn app.main:app --reload
-
-# Or specify host and port
+# Run the server
 uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
-The server will start at `http://localhost:8000`. Interactive API docs are available at `/docs`.
+The server will start at `http://172.20.10.3:8000/ping` for external access (depending on mac IP adresse).
 
 ## Setup
 

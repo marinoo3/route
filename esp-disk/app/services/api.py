@@ -99,7 +99,7 @@ class API:
             "data": samples.to_binary(),
         }
         return self._enqueue(
-            APIQueueRequest("/upload", payload, "upload")
+            APIQueueRequest("/register_route_buffer", payload, "upload")
         )
 
     def predict(self, samples: IMUSamplesBuffer) -> bool:

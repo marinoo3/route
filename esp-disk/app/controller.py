@@ -47,6 +47,10 @@ class Controller:
 
         # Send buffer if it is time to do so
         if self._now() > self.buffer.timestamp_start + self.push_frecency_ms:
-            log(self.buffer.count)
-#             self.api.send_buffer(self.buffer)
+#             log(self.buffer.count)
+            start_time = self._now()
+            self.api.send_buffer(self.buffer)
+            total_time = time.ticks_diff(round(self._now()), start_time) / 1000
+            print(f"[TIME] Sending time: {total_time}")
             self.buffer.clear()
+

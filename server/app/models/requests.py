@@ -14,7 +14,7 @@ class BonjourRequest(AuthRequest):
 @dataclass
 class IMUBufferRequest:
     session_id: str
-    window_id: str
+    timestamp_start: float
     samples: bytes
 
     def decode_samples(self) -> list[dict]:
@@ -29,5 +29,5 @@ class IMUBufferRequest:
             pass
         except Exception:
             raise BufferError("Failed to decode buffer samples", self.session_id)
-        
+
         return []
