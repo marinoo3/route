@@ -1,4 +1,4 @@
-from app.models import Session
+from app.models import Session, IMUSample
 
 
 class DBService:
@@ -26,17 +26,15 @@ class DBService:
     
     def register_samples(
             self, 
-            samples: list[dict],
-            session_id: str,
-            device_id: str
+            samples: list[IMUSample],
+            session_id: str
         ) -> None:
         """
         Save IMU sensor buffer in database
 
         Args:
-            samples (list[dict]): IMU samples to save
+            samples (list[IMUSample]): IMU samples to save
             session_id (str): ID of the active session
-            device_id (str): User device ID
         """
         #TODO: save buffer in ROUTE table with session_id as index
         pass

@@ -1,5 +1,5 @@
-from app.libs.micropython_ssd1306 import SSD1306_I2C
-from models.display_element import DisplayElement
+from app.mocks.micropython_ssd1306 import SSD1306_I2C
+from app.models import DisplayElement
 
 from machine import Pin, I2C
 
@@ -172,9 +172,9 @@ class Display:
     def add_text(
         self,
         name: str,
-        x: int,
-        y: int,
-        max_chars: int,
+        x: int = 0,
+        y: int = 0,
+        max_chars: int = 16,
         template: str = "{}",
         value: str = "",
         visible: bool = True,

@@ -1,3 +1,6 @@
+# MICROPYTHON EMULATION
+import os
+
 from config import (
     SDA_PIN, SCL_PIN,
     API_URL, API_KEY, PUSH_FRECENCY_SEC,
@@ -5,7 +8,7 @@ from config import (
 )
 
 from app.modules import IMUSensor, Display
-from app.services import API, SimpleAPI
+from app.services import API, SimpleAPI, Ui
 from app.controller import Controller
 
 import machine
@@ -32,12 +35,13 @@ def main():
     imu.configure(acc_divisor=31, gyro_divisor=31)  # ~35.2 Hz internal
 
     display = Display(sda=SDA_PIN, scl=SCL_PIN)
+    ui = Ui(display)
 
     # -------- Control
 
     controller = Controller(
         imu=imu,
-        display=display,
+        ui=ui,
         api=api,
         push_frecency_sec=PUSH_FRECENCY_SEC
     )

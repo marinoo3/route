@@ -76,8 +76,8 @@ class IMUSamplesBuffer:
 
 
 class IMUBinaryCodec:
-    HEADER_FMT = "<H"      # window_id, timestamp_start, sample_count
-    SAMPLE_FMT = "<4f"      # t_us, ax, ay, az, gx, gy, gz, temp_c
+    HEADER_FMT = "<HIH"    # window_id (u16), timestamp_start (u32), count (u16)
+    SAMPLE_FMT = "<4f"     # ax, ay, az, gz
     HEADER_SIZE = struct.calcsize(HEADER_FMT)
     SAMPLE_SIZE = struct.calcsize(SAMPLE_FMT)
 

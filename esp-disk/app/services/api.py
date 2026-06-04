@@ -75,7 +75,7 @@ class API:
             "device_id": self._device_id
         }
 
-        content = self._post_with_retry("/create_session", payload)
+        content = self._post_with_retry("/create_session", json=payload)
         if not content:
             raise APIError("Failed to create a route session")
 
@@ -93,13 +93,15 @@ class API:
         Returns:
             bool: True if request was queued, False if queue is full
         """
-        payload = {
-            "session_id": self._session_id,
-            "timestamp_start": samples.timestamp_start,
-            "data": samples.to_binary(),
-        }
+        endpoint = f"/register_route_buffer?session_id={self._session_id}"
+        payload = bytes(samples.to_binary())
+        
         return self._enqueue(
-            APIQueueRequest("/register_route_buffer", payload, "upload")
+            APIQueueRequest(
+                "upload", 
+                endpoint, 
+                data=payload
+            )
         )
 
     def predict(self, samples: IMUSamplesBuffer) -> bool:
@@ -112,14 +114,14 @@ class API:
         Returns:
             bool: True if request was queued, False if queue is full
         """
-        payload = {
-            "session_id": self._session_id,
-            "window_id": samples.window_id,
-            "samples": samples.values,
-        }
+        payload = bytes(samples.to_binary())
 
         return self._enqueue(
-            APIQueueRequest("/predict", payload, "predict")
+            APIQueueRequest(
+                "predict",
+                "/predict", 
+                data=payload
+            )
         )
 
     def get_last_prediction(self) -> str|None:
@@ -173,13 +175,22 @@ class API:
                 time.sleep_ms(50)
                 continue
             
-            response_data = self._post_with_retry(request.endpoint, request.payload)
+            response_data = self._post_with_retry(
+                request.endpoint, 
+                json=request.json,
+                data=request.data
+            )
 
             if request.kind == "predict" and response_data is not None:
                 with self._prediction_lock:
                     self._last_prediction = response_data['route']
 
-    def _post_with_retry(self, endpoint: str, payload: dict) -> dict|None:
+    def _post_with_retry(
+            self, 
+            endpoint: str, 
+            json: dict|None = None,
+            data: bytes|None = None
+        ) -> dict|None:
         """
         Send HTTP POST with retry logic.
 
@@ -196,13 +207,13 @@ class API:
             response = None
             try:
                 log(url)
-                response = urequests.post(url, json=payload, timeout=self._timeout_s)
+                response = urequests.post(url, json=json, data=data, timeout=self._timeout_s)
                 if 200 <= response.status_code < 300:
                     try:
-                        data = response.json()
+                        content = response.json()
                     except Exception:
-                        data = {"status": "ok"}
-                    return data
+                        content = {"status": "ok"}
+                    return content
             except Exception as e:
                 log(e)
             finally:

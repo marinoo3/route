@@ -1,33 +1,8 @@
-from app.models.exceptions import BufferError
-
-from dataclasses import dataclass
+from pydantic import BaseModel
 
 
-@dataclass
-class AuthRequest:
+class AuthRequest(BaseModel):
     api_key: str
 
-@dataclass
 class BonjourRequest(AuthRequest):
     device_id: str
-
-@dataclass
-class IMUBufferRequest:
-    session_id: str
-    timestamp_start: float
-    samples: bytes
-
-    def decode_samples(self) -> list[dict]:
-        """
-        Decode binary encoded sample values
-
-        Returns:
-            list[dict]: Decoded sample
-        """
-        try:
-            #TODO: decode binary
-            pass
-        except Exception:
-            raise BufferError("Failed to decode buffer samples", self.session_id)
-
-        return []

@@ -1,5 +1,6 @@
 from app.models import IMUSamplesBuffer
 from app.models.exceptions import APIError
+from app.models.imu_sample import IMUBinaryCodec
 from app import log
 
 import time
@@ -46,14 +47,28 @@ class SimpleAPI:
         return self._session_id
 
     def send_buffer(self, samples: IMUSamplesBuffer) -> bool:
-        print("Building payload")
-        payload = {
-            "session_id": self._session_id,
-            "timestamp_start": samples.timestamp_start,
-            "data": samples.to_binary(),
+        payload = bytes(samples.to_binary())  # force immutable raw bytes
+        url = self._base_url + f"/register_route_buffer?session_id={self._session_id}"
+        headers = {
+            "Content-Type": "application/octet-stream",
+            "Content-Length": str(len(payload)),
         }
-        print("Done")
-        return self._post_with_retry("/register_route_buffer", payload, headers={"Content-Type": "application/octet-stream"}) is not None
+        
+        print("HEADER_FMT", IMUBinaryCodec.HEADER_FMT)
+        print("HEADER_SIZE", IMUBinaryCodec.HEADER_SIZE)
+        print("SAMPLE_SIZE", IMUBinaryCodec.SAMPLE_SIZE)
+        payload = samples.to_binary()
+        print("payload_len", len(payload))
+        print("payload_head_hex", bytes(payload[:24]).hex())
+
+        response = urequests.post(
+            url,
+            data=payload,   # body = raw binary bytes
+            timeout=self._timeout_s,
+            headers=headers,
+        )
+
+        return response.status_code == 200
 
     def predict(self, samples: IMUSamplesBuffer) -> str | None:
         payload = {
@@ -61,7 +76,6 @@ class SimpleAPI:
             "window_id": samples.window_id,
             "samples": samples.values,
         }
-        print(payload)
         content = self._post_with_retry("/predict", payload)
         if content is not None:
             self._last_prediction = content.get("route")
@@ -76,6 +90,7 @@ class SimpleAPI:
             payload: dict, 
             headers: dict|None = None
         ) -> dict | None:
+
         url = self._base_url + endpoint
 
         for attempt in range(self._retry_count + 1):
@@ -88,7 +103,6 @@ class SimpleAPI:
                     timeout=self._timeout_s,
                     headers=headers
                 )
-                print("Request ended")
                 if 200 <= response.status_code < 300:
                     try:
                         data = response.json()
@@ -105,5 +119,6 @@ class SimpleAPI:
                 time.sleep_ms(200)
 
         return None
+
 
 

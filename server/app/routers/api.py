@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Body
 
-from app.models import BonjourRequest, IMUBufferRequest
+from app.models import BonjourRequest, IMUBuffer
 from app.models.exceptions import DBError, BufferError
 from app.services import DBService
 
@@ -9,6 +9,8 @@ router = APIRouter(
     prefix="/api",
     tags=["api"]
 )
+
+start_time = None
 
 
 @router.post("/create_session", summary="Create a route session")
@@ -34,40 +36,30 @@ async def create_session(body: BonjourRequest, request: Request):
 @router.post("/register_route_buffer", summary="Register IMU data buffer in a route")
 async def register_route_buffer(
     session_id: str,
-    timestamp_start: float,
     data: bytes = Body(..., media_type="application/octet-stream"),
-    request: Request = None,
+    request: Request = None
 ):
     """
     Register IMU data buffer in a route
 
     Args:
         session_id (str): Session ID
-        timestamp_start (float): Start timestamp
-        data (bytes): Binary encoded sample data
+        data (bytes): Binary encoded payload (header + samples)
         request (Request): Default request argument
-
-    Returns:
-        json: {
-            success (bool): Successfully saved the buffer in database
-        }
     """
-    print(data)
+    global start_time
     db_service: DBService = request.app.state.db_service
-    success = False
 
-    # try:
-    body = IMUBufferRequest(
+    buffer = IMUBuffer(
         session_id=session_id,
-        timestamp_start=timestamp_start,
-        samples=data
+        binary=data
     )
-    samples = body.decode_samples()
-    db_service.register_samples(samples, body.session_id)
-    success = True
-    # except (DBError, BufferError) as e:
-    #     print(e)
 
-    return {
-        'success': success
-    }
+    if start_time is not None:
+        print(buffer.timestamp_start - start_time)
+    start_time = buffer.timestamp_start
+
+    try:
+        db_service.register_samples(buffer.samples, buffer.session_id)
+    except (DBError, BufferError) as e:
+        print(e)
