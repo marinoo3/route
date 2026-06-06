@@ -17,9 +17,11 @@ class Vue:
         Listen to event queue and trigger actions
         """
         for event in self._events_queue:
-            action = self._binded_events[event]
-            if action is not None:
-                action()
+            actions = self._binded_events.get(event, [])
+            for a in actions:
+                a()
+
+        self._events_queue.clear()
 
     def bind(self, event: str, action: "Callable") -> None:
         """

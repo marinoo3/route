@@ -35,10 +35,10 @@ async def create_session(body: BonjourRequest, request: Request):
 
 @router.post("/register_route_buffer", summary="Register IMU data buffer in a route")
 async def register_route_buffer(
-    session_id: str,
-    data: bytes = Body(..., media_type="application/octet-stream"),
-    request: Request = None
-):
+        session_id: str,
+        data: bytes = Body(..., media_type="application/octet-stream"),
+        request: Request = None
+    ):
     """
     Register IMU data buffer in a route
 

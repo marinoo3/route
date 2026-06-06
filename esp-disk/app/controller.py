@@ -1,6 +1,6 @@
 from app.models import IMUSamplesBuffer
 from app.modules import IMUSensor
-from app.services import API, Ui
+from app.services import AsyncAPI, Ui
 
 import time
 
@@ -11,7 +11,7 @@ class Controller:
             self,
             imu: IMUSensor,
             ui: Ui,
-            api: API,
+            api: AsyncAPI,
             push_frecency_sec: int
         ) -> None:
         self.imu = imu
@@ -36,7 +36,7 @@ class Controller:
         print('Calibrating, keep still...')
         self.imu.calibrate_gyro_bias()
 
-    def step(self) -> None:
+    async def step(self) -> None:
         """
         Controller logic step
         """
@@ -47,7 +47,7 @@ class Controller:
         # Send buffer if it is time to do so
         if self._now() > self.buffer.timestamp_start + self.push_frecency_ms:
             start_time = self._now()
-            self.api.send_buffer(self.buffer)
+            await self.api.send_buffer(self.buffer)
             total_time = time.ticks_diff(round(self._now()), start_time) / 1000
             print(f"[TIME] Sending time: {total_time}")
             self.buffer.clear()

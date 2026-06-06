@@ -6,6 +6,7 @@ from app.modules import Display
 from app.services import Ui
 from app.vues import BootVue
 
+import time
 
 
 
@@ -13,13 +14,17 @@ from app.vues import BootVue
 
 
 
-if __name__ == "__main__":
-    display = Display(sda=SDA_PIN, scl=SCL_PIN)
-    ui = Ui(display)
+display = Display(sda=SDA_PIN, scl=SCL_PIN)
+ui = Ui(display)
 
-    ui.load_vue(
-        BootVue()
-    )
+ui.load_vue(
+    BootVue()
+)
 
-    while True:
-        ui.update()
+ui.dispatch_event("calibrateGyro")
+ui.update()
+time.sleep(1)
+
+ui.dispatch_event("createSession")
+ui.update()
+time.sleep(1)

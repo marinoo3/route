@@ -37,6 +37,21 @@ class Display:
         self._dirty_rects = []
         self._full_dirty = True
 
+    def test(self):
+        self._oled.fill(1)
+
+    def draw_buf(self, buf):
+            h = len(buf)
+            w = len(buf[0])
+
+            for y in range(h):
+                if y >= self._oled.height:
+                    break
+                for x in range(w):
+                    if x >= self._oled.width:
+                        break
+                    self._oled.pixel(x, y, buf[y][x])
+
     def add_element(
         self,
         name: str,
@@ -229,12 +244,9 @@ class Display:
             raise KeyError("Unknown element: {}".format(name))
         return self._elements[name]
 
-    def _sorted_elements(self) -> list:
+    def _sorted_elements(self) -> list[DisplayElement]:
         """
         Return elements sorted by z_index.
-
-        Args:
-            None
 
         Returns:
             list: Sorted DisplayElement list.

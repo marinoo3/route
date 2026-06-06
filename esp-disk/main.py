@@ -1,5 +1,5 @@
 # MICROPYTHON EMULATION
-import os
+import uasyncio as asyncio
 
 from config import (
     SDA_PIN, SCL_PIN,
@@ -8,27 +8,25 @@ from config import (
 )
 
 from app.modules import IMUSensor, Display
-from app.services import API, SimpleAPI, Ui
+from app.services import AsyncAPI, Ui
 from app.controller import Controller
+from app.vues import BootVue
 
 import machine
 
 
-
-
-
-def main():
+async def main():
     """
     Init services and modules then run main loop
     """
     # ------- Services
-    
-    api = SimpleAPI(
+
+    api = AsyncAPI(
         base_url=API_URL,
         api_key=API_KEY,
         device_id=DEVICE_ID
     )
-    
+
     # -------- Modules
 
     imu = IMUSensor(sda=SDA_PIN, scl=SCL_PIN, target_hz=20)
@@ -47,32 +45,36 @@ def main():
     )
 
     # --------- Init
+    
+    ui.load_vue(
+        BootVue()
+    )
 
-    print("Calibrating gyro, keep still..")
+    session_task = asyncio.create_task(api.create_session())
+
+    ui.dispatch_event("calibrateGyro")
+    ui.update()
     imu.calibrate_gyro_bias()
-    print("Done")
 
-    print("Create route session")
-    session_id = api.create_session()
-    api.start()
-    print(session_id)
+    ui.dispatch_event("createSession")
+    ui.update()
+    await session_task
+    
+    ui.dispatch_event("done")
+    ui.update()
 
     # --------- Main loop
-    
+
     while True:
         imu.wait_next_tick()
-        controller.step()
+        await controller.step()
 
 
-
-
-if __name__ == "__main__":    
+if __name__ == "__main__":
     try:
-        main()
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("Exit")
     # except Exception as e:
     #     print("Exit on error:", e)
     #     machine.reset()
-
-

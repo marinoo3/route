@@ -1,4 +1,4 @@
-from micropython_ssd1306 import SSD1306_I2C
+from app.libs.micropython_ssd1306 import SSD1306_I2C
 from machine import Pin, I2C
 import math
 import time
@@ -6,7 +6,6 @@ import time
 # Initialisation I2C
 i2c = I2C(0, scl=Pin(22), sda=Pin(21))
 oled = SSD1306_I2C(128, 32, i2c)
-
 
 # Cube vertices (centered at origin)
 vertices = [
@@ -74,3 +73,4 @@ while True:
 
     angle += 0.1
     time.sleep(0.05)
+
