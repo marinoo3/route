@@ -6,6 +6,8 @@ import time
 # Initialisation I2C
 i2c = I2C(0, scl=Pin(22), sda=Pin(21))
 oled = SSD1306_I2C(128, 32, i2c)
+oled.fill(1)
+oled.show()
 
 # Cube vertices (centered at origin)
 vertices = [

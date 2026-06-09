@@ -1,8 +1,12 @@
+from app.scripts import connect_wifi
 from app.models import IMUSamplesBuffer
+from app.models.event import Event, ClickEvent
 from app.modules import IMUSensor
 from app.services import AsyncAPI, Ui
+from app.vues import BootVue
 
 import time
+import uasyncio as asyncio
 
 
 class Controller:
@@ -12,13 +16,23 @@ class Controller:
             imu: IMUSensor,
             ui: Ui,
             api: AsyncAPI,
-            push_frecency_sec: int
+            push_frecency_sec: int,
+            ssid: str,
+            pwd: str
         ) -> None:
         self.imu = imu
         self.ui = ui
         self.api = api
         self.push_frecency_ms = push_frecency_sec * 1000
         self.buffer = IMUSamplesBuffer()
+        self.wifi_credientials = {
+            'ssid': ssid,
+            'pwd': pwd
+        }
+
+        # Start UI loop
+        asyncio.create_task(self.ui.run())
+        self._last_click = self.ui.button.last_click 
 
     def _now(self) -> int:
         """
@@ -28,15 +42,49 @@ class Controller:
             int: Current time
         """
         return time.ticks_ms()
-
-    def calibrate_imu(self) -> None:
+    
+    def _check_click(self) -> bool:
         """
-        Calibrate gyro bias
-        """
-        print('Calibrating, keep still...')
-        self.imu.calibrate_gyro_bias()
+        Check if new button has been clicked since last check
 
-    async def step(self) -> None:
+        Returns:
+            bool: Has button been clicked
+        """
+        button_click = self.ui.button.last_click
+
+        if button_click != self._last_click:
+            self._last_click = button_click
+            return True
+        
+        return False
+    
+    async def boot(self) -> None:
+        """
+        Start boot sequence
+        """
+        self.ui.load_vue(
+            BootVue()
+        )
+
+        self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']), flush=True)
+        while not connect_wifi(*self.wifi_credientials.values()):
+            self.ui.dispatch_event(Event("wifiFailed"), flush=True)
+            while not self._check_click():
+                await asyncio.sleep(0.1)
+                
+            self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']), flush=True)
+
+        session_task = asyncio.create_task(self.api.create_session())
+
+        for bias in self.imu.calibrate_gyro_bias():
+            self.ui.dispatch_event(Event("calibrateGyro", bias=bias), flush=True)
+
+        self.ui.dispatch_event(Event("createSession"), flush=True)
+        await session_task
+        
+        self.ui.dispatch_event(Event("done"), flush=True)
+
+    async def record(self) -> None:
         """
         Controller logic step
         """

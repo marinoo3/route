@@ -1,3 +1,4 @@
+from app.libs.micropython_ssd1306 import SSD1306_I2C
 
 
 class DisplayElement:
@@ -12,7 +13,7 @@ class DisplayElement:
         y: int,
         width: int,
         height: int,
-        renderer,
+        renderer=None,
         value= None,
         visible: bool = True,
         z_index: int = 0,
@@ -40,7 +41,7 @@ class DisplayElement:
         self.y = y
         self.width = width
         self.height = height
-        self.renderer = renderer
+        self.renderer = renderer or self._default_renderer
         self.value = value
         self.visible = visible
         self.z_index = z_index
@@ -70,3 +71,22 @@ class DisplayElement:
         """
         if self.visible:
             self.renderer(oled, self.x, self.y, self.width, self.height, self.value)
+
+    def _default_renderer(
+            self,
+            oled: SSD1306_I2C, 
+            rx: int, ry: int, rw: int, rh: int, 
+            rvalue: dict
+    ) -> None:
+        """
+        Set default element renderer
+
+        Args:
+            oled (SSD1306_I2C): Oled display
+            rx (int): Position x
+            ry (int): Position y
+            rw (int): Width
+            rh (int): Height
+            rvalue (Any): Value to render
+        """
+        pass

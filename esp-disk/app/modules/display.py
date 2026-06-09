@@ -1,5 +1,5 @@
 from app.mocks.micropython_ssd1306 import SSD1306_I2C
-from app.models import DisplayElement
+from app.vues.elements import DisplayElement
 
 from machine import Pin, I2C
 
@@ -211,7 +211,11 @@ class Display:
         width = max_chars * 8
         height = 8
 
-        def _text_renderer(oled, rx, ry, rw, rh, rvalue):
+        def _text_renderer(
+                oled: SSD1306_I2C, 
+                rx: int, ry: int, rw: int, rh: int, 
+                rvalue: str
+            ):
             text = template.format(rvalue)
             oled.text(text, rx, ry, 1)
 

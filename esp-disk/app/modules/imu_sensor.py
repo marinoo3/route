@@ -76,7 +76,7 @@ class IMUSensor:
         self._acc_bias = acc_bias
         self._gyro_bias = gyro_bias
 
-    def calibrate_gyro_bias(self, samples: int = 200, delay_us: int = 5000) -> tuple[float, float, float]:
+    def calibrate_gyro_bias(self, samples: int = 200, delay_us: int = 5000):
         """
         Estimate gyroscope bias while sensor is perfectly still.
 
@@ -84,7 +84,7 @@ class IMUSensor:
             samples (int): Number of samples for averaging
             delay_us (int): Delay between reads in microseconds
 
-        Returns:
+        Yields:
             tuple[float, float, float]: Estimated (gx, gy, gz) bias in rad/s
         """
         sx = sy = sz = 0.0
@@ -94,11 +94,11 @@ class IMUSensor:
             sx += gx
             sy += gy
             sz += gz
+            yield (sx / samples, sy / samples, sz / samples)
             time.sleep_us(delay_us)
 
         bias = (sx / samples, sy / samples, sz / samples)
         self._gyro_bias = bias
-        return bias
 
     def wait_next_tick(self) -> None:
         """

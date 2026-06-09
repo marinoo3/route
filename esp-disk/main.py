@@ -2,15 +2,16 @@
 import uasyncio as asyncio
 
 from config import (
-    SDA_PIN, SCL_PIN,
+    SDA_PIN, SCL_PIN, BTN_GPIO,
+    SSID, PWD,
     API_URL, API_KEY, PUSH_FRECENCY_SEC,
     DEVICE_ID
 )
 
-from app.modules import IMUSensor, Display
+
+from app.modules import IMUSensor, Display, Button
 from app.services import AsyncAPI, Ui
 from app.controller import Controller
-from app.vues import BootVue
 
 import machine
 
@@ -33,7 +34,8 @@ async def main():
     imu.configure(acc_divisor=31, gyro_divisor=31)  # ~35.2 Hz internal
 
     display = Display(sda=SDA_PIN, scl=SCL_PIN)
-    ui = Ui(display)
+    button = Button(BTN_GPIO)
+    ui = Ui(display, button)
 
     # -------- Control
 
@@ -41,27 +43,17 @@ async def main():
         imu=imu,
         ui=ui,
         api=api,
-        push_frecency_sec=PUSH_FRECENCY_SEC
+        push_frecency_sec=PUSH_FRECENCY_SEC,
+        ssid=SSID,
+        pwd=PWD
     )
 
     # --------- Init
-    
-    ui.load_vue(
-        BootVue()
-    )
 
-    session_task = asyncio.create_task(api.create_session())
+    await controller.boot()
 
-    ui.dispatch_event("calibrateGyro")
-    ui.update()
-    imu.calibrate_gyro_bias()
-
-    ui.dispatch_event("createSession")
-    ui.update()
-    await session_task
-    
-    ui.dispatch_event("done")
-    ui.update()
+    while True:
+        await controller.record()
 
     # --------- Main loop
 

@@ -1,10 +1,19 @@
-from app.modules import Display
+from app.models import Event
+
+TYPE_CHECKING = False
+if TYPE_CHECKING:
+    from app.modules import Display
 
 
+
+class EventHandler:
+    def __init__(self, action: "Callable", once: bool) -> None:
+        self.action = action
+        self.once = once
 
 class Vue:
-    _events_queue: set[str] = set()
-    _binded_events: dict = {}
+    _events_queue: list[Event] = []
+    _binded_events: dict[str, EventHandler] = {}
 
     def _logic_loop(self) -> None:
         """
@@ -17,33 +26,40 @@ class Vue:
         Listen to event queue and trigger actions
         """
         for event in self._events_queue:
-            actions = self._binded_events.get(event, [])
-            for a in actions:
-                a()
+            handler = self._binded_events.get(event.name)
+            if not handler:
+                continue
+
+            handler.action(**event.data)
+            if handler.once:
+                self._binded_events.pop(event.name)
 
         self._events_queue.clear()
 
-    def bind(self, event: str, action: "Callable") -> None:
+    def bind(
+            self, 
+            event: str, 
+            action: "Callable", 
+            once: bool = False
+        ) -> None:
         """
         Bind an action on event
 
         Args:
             event (str): Event to listen
             action (Callable): Function to call on trigger
+            once (bool): Remove event from binded list after being triggered
         """
-        try:
-            self._binded_events[event].append(action)
-        except KeyError:
-            self._binded_events[event] = [action]
+        self._binded_events[event] = EventHandler(action=action, once=once)
     
-    def dispatch(self, event: str) -> None:
+    def dispatch(self, event: Event) -> None:
         """
         Dispatch an event
 
         Args:
             event (str): Event to dispatch
         """
-        self._events_queue.add(event)
+        self._events_queue.append(event)
 
     def update(self) -> None:
         """
@@ -52,10 +68,10 @@ class Vue:
         self._listen_events()
         self._logic_loop()
 
-    def load(self, display: Display) -> None:
+    def load(self, display: "Display") -> None:
         """
         Init / load vue
         """
-        raise NotADirectoryError("'Vue.load' method should implemented to specify how to init the vue.")
+        raise NotImplementedError("'Vue.load' method should implemented to specify how to init the vue.")
 
 
