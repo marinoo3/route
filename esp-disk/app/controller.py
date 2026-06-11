@@ -67,21 +67,26 @@ class Controller:
         )
 
         self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']))
+        await self.ui.tick()
         while not connect_wifi(*self.wifi_credientials.values()):
             self.ui.dispatch_event(Event("wifiFailed"))
+            await self.ui.tick()
             while not self._check_click():
                 await asyncio.sleep(0.1)
-                
+
             self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']))
+            await self.ui.tick()
 
         session_task = asyncio.create_task(self.api.create_session())
 
         for bias in self.imu.calibrate_gyro_bias():
-            self.ui.dispatch_event(Event("calibrateGyro", bias=bias))
+            self.ui.dispatch_event(Event("calibrateGyro", bias=bias), flush=True)
+        await self.ui.tick()
 
         self.ui.dispatch_event(Event("createSession"))
+        await self.ui.tick()
         await session_task
-        
+
     async def record(self) -> None:
         """
         Controller logic step
@@ -107,3 +112,6 @@ class Controller:
                 total_time = time.ticks_diff(round(self._now()), start_time) / 1000
                 print(f"[TIME] Sending time: {total_time}")
                 self.buffer.clear()
+            
+            self.imu.wait_next_tick()
+            await asyncio.sleep(1)

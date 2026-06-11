@@ -68,10 +68,3 @@ class BootVue(Vue):
                 value={'message': "Loging"}
             )
         )
-        self.bind(
-            "done", 
-            lambda: display.set_value(
-                "log", 
-                value={'message': "Done"}
-            )
-        )
