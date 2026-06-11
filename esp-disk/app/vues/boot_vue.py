@@ -1,7 +1,5 @@
 from app.vues.base import Vue
-from app.vues.elements import DisplayElement, Console
-
-import time
+from app.vues.elements import Console
 
 TYPE_CHECKING = False
 if TYPE_CHECKING:

@@ -33,12 +33,9 @@ class Display:
 
         self._oled = oled
         self._bg = 1 if background_color else 0
-        self._elements = {}
-        self._dirty_rects = []
+        self._elements: dict[str, DisplayElement] = {}
+        self._dirty_rects: list[tuple] = []
         self._full_dirty = True
-
-    def test(self):
-        self._oled.fill(1)
 
     def draw_buf(self, buf):
             h = len(buf)
@@ -80,6 +77,13 @@ class Display:
         element = self._require_element(name)
         self._mark_dirty_rect(element.bbox())
         del self._elements[name]
+
+    def remove_all_elements(self) -> None:
+        """
+        Remove all elements from display
+        """
+        for element in self._elements.keys():
+            self.remove_element(element)
 
     def set_value(self, name: str, value) -> None:
         """
@@ -126,7 +130,7 @@ class Display:
         if element.visible != visible:
             element.visible = visible
             element.dirty = True
-            self._mark_dirty_rect(element.bbox())
+            self._mark_dirty_rect(element.bbox())    
 
     def clear(self) -> None:
         """

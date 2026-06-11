@@ -12,6 +12,7 @@ class Ui:
     def __init__(self, display: Display, button: Button) -> None:
         self.display = display
         self.button = button
+        self._render_done = asyncio.Event()
 
         # Start button loop
         asyncio.create_task(self.button.run())
@@ -23,10 +24,11 @@ class Ui:
         Args:
             vue (Vue): Vue to load, child of Vue class
         """
+        self.display.remove_all_elements()
         self.vue = vue
         self.vue.load(self.display)
 
-    def dispatch_event(self, event: Event, flush = False) -> None:
+    def dispatch_event(self, event: Event, flush = True) -> None:
         """
         dispatch event on current vue
 
@@ -52,4 +54,5 @@ class Ui:
         while True:
             self.update()
             await asyncio.sleep(0.1)
+
 

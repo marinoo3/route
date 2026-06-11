@@ -3,7 +3,7 @@ from app.models import IMUSamplesBuffer
 from app.models.event import Event, ClickEvent
 from app.modules import IMUSensor
 from app.services import AsyncAPI, Ui
-from app.vues import BootVue
+from app.vues import BootVue, RecordVue
 
 import time
 import uasyncio as asyncio
@@ -66,39 +66,44 @@ class Controller:
             BootVue()
         )
 
-        self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']), flush=True)
+        self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']))
         while not connect_wifi(*self.wifi_credientials.values()):
-            self.ui.dispatch_event(Event("wifiFailed"), flush=True)
+            self.ui.dispatch_event(Event("wifiFailed"))
             while not self._check_click():
                 await asyncio.sleep(0.1)
                 
-            self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']), flush=True)
+            self.ui.dispatch_event(Event("wifiConnection", ssid=self.wifi_credientials['ssid']))
 
         session_task = asyncio.create_task(self.api.create_session())
 
         for bias in self.imu.calibrate_gyro_bias():
-            self.ui.dispatch_event(Event("calibrateGyro", bias=bias), flush=True)
+            self.ui.dispatch_event(Event("calibrateGyro", bias=bias))
 
-        self.ui.dispatch_event(Event("createSession"), flush=True)
+        self.ui.dispatch_event(Event("createSession"))
         await session_task
         
-        self.ui.dispatch_event(Event("done"), flush=True)
-
     async def record(self) -> None:
         """
         Controller logic step
         """
-        # Collect and save IMU data on buffer
-        sample = self.imu.read_sample()
-        self.buffer.register_sample(sample)
+        self.ui.load_vue(
+            RecordVue()
+        )
 
-        # Send buffer if it is time to do so
-        if self._now() > self.buffer.timestamp_start + self.push_frecency_ms:
-            start_time = self._now()
-            await self.api.send_buffer(self.buffer)
-            total_time = time.ticks_diff(round(self._now()), start_time) / 1000
-            print(f"[TIME] Sending time: {total_time}")
-            self.buffer.clear()
+        while not self._check_click():
+            await asyncio.sleep(0.1)
 
-        self.ui.update()
+        self.ui.dispatch_event(Event("start"))
 
+        while not self._check_click():
+            # Collect and save IMU data on buffer
+            sample = self.imu.read_sample()
+            self.buffer.register_sample(sample)
+
+            # Send buffer if it is time to do so
+            if self._now() > self.buffer.timestamp_start + self.push_frecency_ms:
+                start_time = self._now()
+                await self.api.send_buffer(self.buffer)
+                total_time = time.ticks_diff(round(self._now()), start_time) / 1000
+                print(f"[TIME] Sending time: {total_time}")
+                self.buffer.clear()
