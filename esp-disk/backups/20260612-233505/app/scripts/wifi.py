@@ -49,4 +49,3 @@ async def connect_wifi(ssid: str, pwd: str):
     print("Conection failed")
     return False
 
-

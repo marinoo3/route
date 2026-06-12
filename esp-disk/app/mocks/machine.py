@@ -60,6 +60,17 @@ class I2C:
         self.log: list[Tuple[str, int, bytes]] = []
         self._devices = {}
 
+        # Auto-attach an emulated ICM20948 IMU so the real driver finds a
+        # sensor on the host.  Harmless for write-only peripherals (e.g. the
+        # SSD1306 display at 0x3C) that never read these addresses.
+        try:
+            from icm20948_device import ICM20948Device
+            imu = ICM20948Device()
+            self._devices[0x68] = imu
+            self._devices[0x69] = imu
+        except ImportError:
+            pass
+
     # --- Device registration helper (host-only) ----------------------------
     def register_device(self, addr: int, device) -> None:
         """Attach a mock peripheral with read/write methods."""

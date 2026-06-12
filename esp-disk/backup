@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# -----------------------------------------------------------------------------
+# backup  —  pull the ENTIRE MicroPython filesystem off a connected ESP32 into
+#            ./backups/<timestamp>/   (the read-only reverse of ./flash).
+#
+# Usage (from the esp-disk/ directory):
+#     ./backup                                  # -> backups/YYYYmmdd-HHMMSS/
+#     ESP_PORT=/dev/cu.usbserial-XXXX ./backup  # override the serial port
+#
+# Like ./flash, it goes through .esp_flash.py, which opens the port WITHOUT
+# pulsing DTR/RTS (no board reset) and patiently interrupts into the REPL
+# through the boot window. It walks the device root recursively, mirrors every
+# file locally (structure preserved), then soft-resets so the board resumes
+# running exactly as it was found.
+# -----------------------------------------------------------------------------
+set -euo pipefail
+
+PORT="${ESP_PORT:-/dev/cu.usbserial-0001}"
+
+# Project root = directory this script lives in.
+SRC="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" && pwd)"
+
+# --- sanity checks -----------------------------------------------------------
+if ! command -v python3 >/dev/null 2>&1; then
+    printf '\033[31m✗ python3 not found on PATH\033[0m\n' >&2
+    exit 1
+fi
+if ! python3 -c 'import mpremote' >/dev/null 2>&1; then
+    printf '\033[31m✗ the `mpremote` package is not importable by python3\033[0m\n' >&2
+    printf '  pip install mpremote  (or run from the env that has it)\n' >&2
+    exit 1
+fi
+if [ ! -e "$PORT" ]; then
+    printf '\033[31m✗ ESP not found at %s — replug the USB cable?\033[0m\n' "$PORT" >&2
+    printf '  Or set ESP_PORT, e.g.  ESP_PORT=/dev/cu.usbserial-XXXX ./backup\n' >&2
+    exit 1
+fi
+
+# --- destination -------------------------------------------------------------
+STAMP="$(date +%Y%m%d-%H%M%S)"
+DEST="$SRC/backups/$STAMP"
+mkdir -p "$DEST"
+
+printf '\033[36m→ backing up %s → backups/%s/ …\033[0m\n' "$PORT" "$STAMP"
+
+if python3 "$SRC/.esp_flash.py" "$PORT" backup "$DEST"; then
+    printf '\033[32m✓ backup saved to backups/%s/\033[0m\n' "$STAMP"
+else
+    printf '\033[31m✗ backup failed — tap EN/RST and retry\033[0m\n' >&2
+    printf '  (another serial monitor/REPL holding %s? close it.)\n' "$PORT" >&2
+    rmdir "$DEST" 2>/dev/null || true   # drop the empty dir on failure
+    exit 1
+fi

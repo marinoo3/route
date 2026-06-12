@@ -186,7 +186,11 @@ class FrameBuffer:
             for xx in range(x, x + w):
                 self.pixel(xx, yy, color)
 
-    def rect(self, x: int, y: int, w: int, h: int, color: int) -> None:
+    def rect(self, x: int, y: int, w: int, h: int, color: int, fill: bool = False) -> None:
+        # framebuf.rect supports an optional fill flag: rect(x, y, w, h, c[, f]).
+        if fill:
+            self.fill_rect(x, y, w, h, color)
+            return
         self.hline(x, y, w, color)
         self.hline(x, y + h - 1, w, color)
         self.vline(x, y, h, color)

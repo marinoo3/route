@@ -1,0 +1,223 @@
+# shellcheck shell=bash
+# -----------------------------------------------------------------------------
+# flash  —  push the esp-disk project to a connected ESP32, or control the board.
+#
+# Usage (from the esp-disk/ directory):
+#     source flash                      # flash whole project, then reboot
+#     source flash --repl               # flash, then drop into the REPL
+#     source flash --no-reset           # flash, leave the board running
+#
+#     # copy only specific file(s) with -p (repeatable), path preserved:
+#     source flash -p app/vues/boot_vue.py        # -> /app/vues/boot_vue.py
+#     source flash -p main.py -p config.py --no-reset
+#
+#     # restore the device from a backup (made by ./backup):
+#     source flash -fp backups/20240131-120000    # restore that snapshot
+#     source flash --from-backup                  # restore the LATEST backup
+#     source flash -fp                            # (same — newest backups/* )
+#
+#     # actions (bare keywords, no -p):
+#     source flash stop                 # halt the running program (no reset)
+#     source flash boot                 # hardware-reboot the ESP
+#
+# Why a Python helper instead of plain `mpremote cp`?
+#   On macOS, mpremote/pyserial asserts DTR/RTS every time it OPENS the port,
+#   which hardware-resets the ESP32. boot.py then spends several seconds in a
+#   blocking Wi-Fi connect, so any fresh `mpremote` call gets locked out of the
+#   REPL ("could not enter raw repl"). The helper (.esp_flash.py) opens the port
+#   ONCE with DTR/RTS deasserted (no reset) and patiently interrupts into the
+#   REPL through the boot window, then copies the files.
+#
+# `mocks/` and `libs/` are intentionally excluded (mocks are desktop-only;
+# libs are device drivers flashed separately / rarely change).
+# -----------------------------------------------------------------------------
+
+_flash_project() {
+    local PORT="${ESP_PORT:-/dev/cu.usbserial-0001}"
+    local MPREMOTE="${MPREMOTE:-mpremote}"
+
+    # Parse args:
+    #   -p <file>           queue a specific file to copy (repeatable)
+    #   --repl|--no-reset   post-flash mode flag
+    #   stop|boot           a board action (mutually exclusive with flashing)
+    local MODE="" ACTION="" FILES=() RESTORE=0 RESTORE_DIR=""
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            -p|--path)
+                shift
+                if [ "$#" -eq 0 ]; then
+                    printf '\033[31m✗ -p requires a file path\033[0m\n' >&2; return 1
+                fi
+                FILES+=("$1") ;;
+            -fp|--from-backup)
+                RESTORE=1
+                # Optional value: consume the next token only if it is a real
+                # path (not another flag/action). Omit it -> latest backup.
+                case "${2:-}" in
+                    ""|-*|stop|boot) : ;;
+                    *) RESTORE_DIR="$2"; shift ;;
+                esac ;;
+            --repl|--no-reset) MODE="$1" ;;
+            stop|boot)         ACTION="$1" ;;
+            -*) printf '\033[31m✗ unknown option: %s\033[0m\n' "$1" >&2; return 1 ;;
+            *)  printf "\033[31m✗ unexpected '%s' — use -p <file>, -fp [backup], or an action (stop|boot)\033[0m\n" "$1" >&2; return 1 ;;
+        esac
+        shift
+    done
+
+    # Root files that belong on the device for a full flash. Dev scratch
+    # (t.py, test.py, reload.py) is deliberately left out.
+    local ROOT_FILES=(boot.py main.py config.py)
+
+    # Resolve the project root = directory this script lives in (bash or zsh).
+    local SRC
+    if [ -n "${BASH_SOURCE[0]:-}" ]; then
+        SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    elif [ -n "${ZSH_VERSION:-}" ]; then
+        SRC="$(cd "$(dirname "${(%):-%x}")" && pwd)"
+    else
+        SRC="$PWD"
+    fi
+
+    # --- sanity checks --------------------------------------------------------
+    if ! command -v "$MPREMOTE" >/dev/null 2>&1; then
+        printf '\033[31m✗ mpremote not found on PATH\033[0m\n' >&2
+        return 1
+    fi
+    if [ ! -e "$PORT" ]; then
+        printf '\033[31m✗ ESP not found at %s — replug the USB cable?\033[0m\n' "$PORT" >&2
+        printf '  Or set ESP_PORT, e.g.  ESP_PORT=/dev/cu.usbserial-XXXX source flash\n' >&2
+        return 1
+    fi
+
+    # --- board actions (no flashing) ------------------------------------------
+    if [ -n "$ACTION" ]; then
+        if [ "${#FILES[@]}" -gt 0 ] || [ -n "$MODE" ] || [ "$RESTORE" -eq 1 ]; then
+            printf "\033[31m✗ '%s' takes no files or flags\033[0m\n" "$ACTION" >&2; return 1
+        fi
+        case "$ACTION" in
+            stop)
+                printf '\033[36m→ stopping program on %s …\033[0m\n' "$PORT"
+                if python3 "$SRC/.esp_flash.py" "$PORT" stop; then
+                    printf '\033[32m✓ stopped — paused at the REPL (not reset)\033[0m\n'
+                else
+                    printf '\033[31m✗ could not stop — tap EN/RST?\033[0m\n' >&2; return 1
+                fi ;;
+            boot)
+                printf '\033[36m→ rebooting %s …\033[0m\n' "$PORT"
+                if python3 "$SRC/.esp_flash.py" "$PORT" boot; then
+                    printf '\033[32m✓ rebooted\033[0m\n'
+                else
+                    printf '\033[31m✗ could not reboot — tap EN/RST?\033[0m\n' >&2; return 1
+                fi ;;
+        esac
+        return 0
+    fi
+
+    # --- decide what to flash: a backup to restore, or a staged tree ----------
+    local STAGE CLEANUP=1
+    if [ "$RESTORE" -eq 1 ]; then
+        if [ "${#FILES[@]}" -gt 0 ]; then
+            printf '\033[31m✗ -fp cannot be combined with -p\033[0m\n' >&2; return 1
+        fi
+        # No path given -> restore the most recent (full) backup.
+        if [ -z "$RESTORE_DIR" ]; then
+            RESTORE_DIR="$(ls -1d "$SRC"/backups/*/ 2>/dev/null | sort | tail -n1)"
+            if [ -z "$RESTORE_DIR" ]; then
+                printf '\033[31m✗ no backups found in backups/ — run ./backup first\033[0m\n' >&2
+                return 1
+            fi
+        fi
+        RESTORE_DIR="${RESTORE_DIR%/}"
+        if [ ! -d "$RESTORE_DIR" ]; then
+            printf '\033[31m✗ backup not found: %s\033[0m\n' "$RESTORE_DIR" >&2; return 1
+        fi
+        if [ -z "$(ls -A "$RESTORE_DIR" 2>/dev/null)" ]; then
+            printf '\033[31m✗ backup is empty: %s\033[0m\n' "$RESTORE_DIR" >&2; return 1
+        fi
+        # A backup dir is already a device-root mirror, so flash it as-is.
+        STAGE="$RESTORE_DIR"
+        CLEANUP=0   # never delete the user's backup
+    else
+        # Build a mirror tree in $STAGE; .esp_flash.py walks it and recreates the
+        # same structure (and parent dirs) on the device.
+        STAGE="$(mktemp -d "${TMPDIR:-/tmp}/esp-flash.XXXXXX")" || return 1
+
+        local f stage_err="" rel
+        if [ "${#FILES[@]}" -gt 0 ]; then
+            # Selected files: keep each file's path relative to the project root
+            # so it lands at the same place on the device.
+            for f in "${FILES[@]}"; do
+                rel="${f#./}"
+                if [ ! -f "$SRC/$rel" ]; then
+                    stage_err="not found: $rel"; break
+                fi
+                mkdir -p "$STAGE/$(dirname "$rel")" \
+                    && cp "$SRC/$rel" "$STAGE/$rel" || { stage_err="copy $rel"; break; }
+            done
+        else
+            # Whole project: explicit root files + app/ (minus mocks, libs, junk).
+            for f in "${ROOT_FILES[@]}"; do
+                [ -f "$SRC/$f" ] && { cp "$SRC/$f" "$STAGE/" || stage_err="copy $f"; }
+            done
+            if [ -z "$stage_err" ]; then
+                rsync -a \
+                    --exclude='mocks'       --exclude='libs' \
+                    --exclude='__pycache__' --exclude='*.pyc' \
+                    --exclude='.DS_Store'   --exclude='.git' \
+                    "$SRC/app/" "$STAGE/app/" || stage_err="rsync app/"
+            fi
+        fi
+        if [ -n "$stage_err" ]; then
+            printf '\033[31m✗ staging failed (%s)\033[0m\n' "$stage_err" >&2
+            rm -rf "$STAGE"
+            return 1
+        fi
+    fi
+
+    # --- flash ----------------------------------------------------------------
+    if [ "$RESTORE" -eq 1 ]; then
+        printf '\033[36m→ restoring backups/%s → %s …\033[0m\n' "$(basename "$RESTORE_DIR")" "$PORT"
+    elif [ "${#FILES[@]}" -gt 0 ]; then
+        printf '\033[36m→ flashing %d file(s) to %s …\033[0m\n' "${#FILES[@]}" "$PORT"
+    else
+        printf '\033[36m→ flashing project to %s …\033[0m\n' "$PORT"
+    fi
+
+    # The helper soft-resets to run the new code, except for --no-reset/--repl
+    # (for --repl we let `mpremote repl` reset & show fresh boot output).
+    local reset_arg="reset"
+    [ "$MODE" = "--no-reset" ] && reset_arg="noreset"
+    [ "$MODE" = "--repl" ]     && reset_arg="noreset"
+
+    python3 "$SRC/.esp_flash.py" "$PORT" flash "$STAGE" "$reset_arg"
+    local rc=$?
+
+    [ "$CLEANUP" -eq 1 ] && rm -rf "$STAGE"
+
+    if [ "$rc" -ne 0 ]; then
+        printf '\033[31m✗ %s failed — tap EN/RST and run again\033[0m\n' \
+            "$([ "$RESTORE" -eq 1 ] && echo restore || echo flash)" >&2
+        printf '  (another serial monitor/REPL holding %s? close it.)\n' "$PORT" >&2
+        return 1
+    fi
+    printf '\033[32m✓ %s\033[0m\n' "$([ "$RESTORE" -eq 1 ] && echo restored || echo flashed)"
+
+    # --- post-flash action ----------------------------------------------------
+    case "$MODE" in
+        --no-reset)
+            printf 'left at REPL (no reset)\n'
+            ;;
+        --repl)
+            printf '\033[36m→ opening REPL (Ctrl-] to exit)…\033[0m\n'
+            "$MPREMOTE" connect "$PORT" repl
+            ;;
+        *)
+            printf 'rebooted into new code\n'
+            ;;
+    esac
+
+    return 0
+}
+
+_flash_project "$@"

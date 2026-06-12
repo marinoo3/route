@@ -1,4 +1,5 @@
-from app.models import IMUSamplesBuffer
+from config import PUSH_FRECENCY_SEC, API_MAX_QUEUE_SIZE
+from app.models import IMUSamplesBuffer, APIRequest
 from app.models.exceptions import APIError
 from app import log
 
@@ -6,12 +7,13 @@ import uasyncio as asyncio
 from app.libs.async_urequests import arequests
 
 
-class AsyncAPI:
+class API:
     """
     Async API service — all HTTP calls are coroutines, no blocking, no threads.
     Designed to run inside a uasyncio event loop.
     """
     _session_id: str | None
+    _queue: list[APIRequest]
 
     def __init__(
         self,
@@ -37,46 +39,76 @@ class AsyncAPI:
         self._timeout_s = timeout_s
         self._retry_count = retry_count
 
-    async def create_session(self) -> str:
+        self._push_frequency_sec = PUSH_FRECENCY_SEC
+        self._max_queue_size = API_MAX_QUEUE_SIZE
+
+    def _queue_request(self, request: APIRequest) -> bool:
         """
-        Request server to create a new route session.
+        Queue a post request
+
+        Args:
+            request (APIRequest): Request to queue
 
         Returns:
-            str: Created session ID
-
-        Raises:
-            APIError: If the session could not be created
+            bool: Was the request queued
         """
-        payload = {
-            "api_key": self._api_key,
-            "device_id": self._device_id,
-        }
-        content = await self._post_with_retry("/create_session", json=payload)
-        if not content:
+        if len(self._queue) > self._push_frequency_sec:
+            self._queue.append(request)
+            return True
+        
+        return False
+
+    async def create_session(self) -> None:
+        """
+        Add session creation event in queue
+        """
+        content = await self._post_with_retry(
+            "/create_session",
+            json={
+                "api_key": self._api_key,
+                "device_id": self._device_id,
+            }
+        )
+
+        if not content or not content.get('session_id'):
             raise APIError("Failed to create a route session")
         
-        session_id = content["session_id"]
-        self._session_id = session_id
-        return session_id
+        self._session_id = content['session_id']
 
-    async def send_buffer(self, samples: IMUSamplesBuffer) -> bool:
+    def send_buffer(self, samples: IMUSamplesBuffer) -> None:
         """
+        Add buffer send event in API queue:
         Send a binary IMU buffer to the server.
 
         Args:
             samples (IMUSamplesBuffer): IMU samples batch to upload
-
-        Returns:
-            bool: True if the server acknowledged the upload, False otherwise
         """
         payload = bytes(samples.to_binary())
-        endpoint = f"/register_route_buffer?session_id={self._session_id}"
-        headers = {
-            "Content-Type": "application/octet-stream",
-            "Content-Length": str(len(payload)),
-        }
-        content = await self._post_with_retry(endpoint, data=payload, headers=headers)
-        return content is not None
+
+        request = APIRequest(
+            endpoint=f"/register_route_buffer?session_id={self._session_id}",
+            headers = {
+                "Content-Type": "application/octet-stream",
+                "Content-Length": str(len(payload)),
+            }
+        )
+
+        self._queue_request(request)
+
+    async def run(self) -> APIRequest:
+        """
+        Continuously send API requests if in queue
+        """
+        while True:
+            request = self._queue.pop(0)
+            if not request:
+                await asyncio.sleep(0.1)
+                continue
+            
+            content = await self._post_with_retry(request.endpoint, headers=request.headers, json=request.json, data=request.data)
+            
+            if request.post_action:
+                request.post_action(content)
 
     async def _post_with_retry(
         self,
@@ -125,3 +157,4 @@ class AsyncAPI:
                 await asyncio.sleep_ms(200)
 
         return None
+
