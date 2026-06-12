@@ -93,7 +93,15 @@ async def open_connection(host, port, ssl):
     import usocket as socket
     gc.collect()
 
-    ai = socket.getaddrinfo(host, port)[0]
+    # Pick a TCP (SOCK_STREAM) result. Some hosts (e.g. the macOS unix port)
+    # return the UDP entry first, which makes HTTP fail with ECONNREFUSED on the
+    # first recv. HTTP always needs a stream socket.
+    infos = socket.getaddrinfo(host, port)
+    ai = infos[0]
+    for _ai in infos:
+        if _ai[1] == socket.SOCK_STREAM:
+            ai = _ai
+            break
     s = socket.socket(ai[0], ai[1], ai[2])
     s.setblocking(False)
     try:

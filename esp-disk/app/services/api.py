@@ -134,7 +134,7 @@ class API:
         for attempt in range(self._retry_count + 1):
             response = None
             try:
-                log(url)
+                print(url)
                 response = await arequests.post(
                     url,
                     headers=headers or {},
@@ -148,7 +148,7 @@ class API:
                     except Exception:
                         return {"status": "ok"}
             except Exception as e:
-                log(e)
+                print(e)
             finally:
                 if response is not None:
                     response.close()

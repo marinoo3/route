@@ -66,6 +66,7 @@ class Controller:
         Init boot sequence then load record vue
         """
         await self.boot()
+        await self.record()
     
     async def boot(self) -> None:
         """
@@ -91,7 +92,6 @@ class Controller:
 
         self.ui.dispatch_event(Event("createSession"))
         self.ui.update()
-        print("display updated")
         await self.api.create_session()
 
     async def record(self) -> None:
